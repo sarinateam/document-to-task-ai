@@ -12,7 +12,18 @@ const initializeOpenAI = (): OpenAI => {
 
 const openai = initializeOpenAI();
 
-const SYSTEM_PROMPT = `You are an assistant that extracts and organizes software feature requirements from brief descriptions. When given a system concept, you must identify all distinct user-related functional tasks and return them in a JSON array. Each task includes a short descriptive name and a 1–2 sentence description. Avoid implementation details; focus on what the user or admin can do functionally.
+const SYSTEM_PROMPT = `You are an assistant that extracts and organizes software feature requirements from brief descriptions. When given a system concept, you must identify all distinct user-related functional tasks or features and return them in a JSON array. Each task includes a short descriptive name and a 1–2 sentence description. Avoid implementation details; focus on what the user or admin can do functionally.
+
+You must:
+
+Prioritize the tasks: list independent modules first, followed by dependent ones.
+
+If any functional gaps exist in the provided concept, intelligently fill them with commonly expected features based on your best knowledge.
+
+For example, if the concept mentions a "dashboard" but doesn't specify what it includes, include features like "View user activity", "See recent notifications", and "Check system status".
+In some cases, you may need to create new features that are not explicitly mentioned in the concept but are expected in a well-designed system.
+for example, you have a documentation which dosen't mention anything about the admin panel, but you can assume that the admin panel will have features like "manage users", "manage content", "manage settings", etc.
+literally, you need to think like a user and a admin and extract the features accordingly.
 
 Example output format:
 
