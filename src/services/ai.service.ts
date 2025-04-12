@@ -12,34 +12,55 @@ const initializeOpenAI = (): OpenAI => {
 
 const openai = initializeOpenAI();
 
-const SYSTEM_PROMPT = `You are an assistant that extracts and organizes software feature requirements from brief descriptions. When given a system concept, you must identify all distinct user-related functional tasks or features and return them in a JSON array. Each task includes a short descriptive name and a 1–2 sentence description. Avoid implementation details; focus on what the user or admin can do functionally.
+const SYSTEM_PROMPT = `You are an assistant that extracts and organizes complete and detailed software feature requirements from brief system descriptions. Your goal is to output every possible functional task or feature that any user role (user, admin, moderator, etc.) may interact with When given a concept, your task is to return all distinct, granular user-facing functional features, covering all roles (e.g., user, admin, moderator, etc.) in a JSON array. Each task must include a concise name and a 1–2 sentence description of what the user or role can do functionally.
 
 You must:
 
-Prioritize the tasks: list independent modules first, followed by dependent ones.
+  STRICTLY include ALL relevant user-facing features — Do not skip or summarize features. Your output must be exhaustive.
 
-If any functional gaps exist in the provided concept, intelligently fill them with commonly expected features based on your best knowledge.
+  Break down high-level concepts into specific, actionable tasks. For example, do not list “Admin Panel” or “Dashboard” as a single feature—decompose them into functional tasks like “Manage users,” “Review reports,” “Edit site settings,” “Monitor performance metrics,” etc.
 
-For example, if the concept mentions a "dashboard" but doesn't specify what it includes, include features like "View user activity", "See recent notifications", and "Check system status".
-In some cases, you may need to create new features that are not explicitly mentioned in the concept but are expected in a well-designed system.
-for example, you have a documentation which dosen't mention anything about the admin panel, but you can assume that the admin panel will have features like "manage users", "manage content", "manage settings", etc.
-literally, you need to think like a user and a admin or any other user roles who will be using the system and extract the features accordingly.
+  List independent modules first, followed by dependent or supporting features (e.g., “User registration” comes before “Create post” if a post requires an account).
+
+  If the concept lacks certain but commonly expected features, intelligently fill in those gaps. Always think like the actual users or admins: what would they expect to be able to do in such a system?
+
+  Cover all relevant personas: end-users, admins, content creators, moderators, etc.
+
+  Include edge-case or advanced features when appropriate, such as “2FA setup,” “Content version history,” “Role-based access control,” “Analytics dashboard,” etc.
+
+  Include settings and configurations (e.g., “Update profile preferences,” “Configure notification settings”), and if relevant, system maintenance or data export tasks.
+
+  List minimum 50 features for every document this is very important.
+
+Competitive Benchmarking:
+
+  Identify 2–3 top competitors in the same domain as the described system.
+
+  Analyze their websites, feature lists, or public documentation.
+
+  Extract key features and reflect them in your final output.
+
+  Infer additional expected features even if not listed, based on industry standards and common functionality.
 
 Example output format:
 
-[
-  {
-    "task": "authentication",
-    "description": "Login using email and password"
-  },
-  {
-    "task": "registration",
-    "description": "Register using email, mobile number, and personal details"
-  }
-]
+  [
+    {
+      "task": "user registration",
+      "description": "Register a new account using email, phone number, or third-party authentication providers."
+    },
+    {
+      "task": "manage user roles",
+      "description": "Admins can assign and modify roles such as user, moderator, or super admin."
+    },
+    {
+      "task": "audit logs",
+      "description": "Admins can view a log of system activities and user actions for security and compliance tracking."
+    }
+  ]
 
 
-IMPORTANT: Return ONLY the JSON array with no additional text, markdown formatting, or explanations.`;
+IMPORTANT: Return ONLY the JSON array with no extra text, explanations, or markdown formatting. Be exhaustive and precise. Avoid generic groupings—always favor a detailed, functional breakdown.`;
 
 // Function to analyze document content with OpenAI
 export const analyzeDocumentContent = async (
@@ -59,10 +80,7 @@ export const analyzeDocumentContent = async (
     // Log the prompts for debugging
     console.log('System Prompt:', SYSTEM_PROMPT);
     
-    const userPrompt = `Please analyze the following description and extract all distinct user-related 
-          functional tasks (like registration, password reset, comment moderation, etc.) and return them as a JSON 
-          array. Each item should have a "task" field with a short name and a "description" field with a 1–2 sentence 
-          explanation.:\n\n${text}`;
+    const userPrompt = `\n\n${text}`;
     
     console.log('User Prompt:', userPrompt);
     console.log('Using model:', modelId);
@@ -133,6 +151,23 @@ export const analyzeDocumentContent = async (
   }
 };
 
+// Function to format task title to normal words
+const formatTaskTitle = (title: string): string => {
+  // Replace underscores and hyphens with spaces
+  let formattedTitle = title.replace(/[_-]/g, ' ');
+  
+  // Remove extra spaces
+  formattedTitle = formattedTitle.replace(/\s+/g, ' ').trim();
+  
+  // Capitalize first letter of each word
+  formattedTitle = formattedTitle
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+  
+  return formattedTitle;
+};
+
 // Function to parse tasks from AI response
 const parseTasksFromResponse = (response: string): Task[] => {
   try {
@@ -161,7 +196,7 @@ const parseTasksFromResponse = (response: string): Task[] => {
         
         return {
           id: `task-${index + 1}`,
-          title: item.task || 'Untitled Task',
+          title: item.task ? formatTaskTitle(item.task) : 'Untitled Task',
           description: item.description || 'No description provided',
           priority: 3 // Required field
           // category and dependencies are optional, so we don't need to set them
@@ -191,7 +226,7 @@ const parseTasksFromResponse = (response: string): Task[] => {
         
         return {
           id: `task-${index + 1}`,
-          title: item.task || 'Untitled Task',
+          title: item.task ? formatTaskTitle(item.task) : 'Untitled Task',
           description: item.description || 'No description provided',
           priority: 3 // Required field
           // category and dependencies are optional, so we don't need to set them
@@ -203,7 +238,6 @@ const parseTasksFromResponse = (response: string): Task[] => {
     }
     
     // Check if the response is an object with a different structure
-    // This handles cases where the response might have a different format
     if (typeof parsedResponse === 'object' && parsedResponse !== null) {
       console.log('Response is an object with unknown structure, attempting to extract tasks');
       
@@ -229,11 +263,12 @@ const parseTasksFromResponse = (response: string): Task[] => {
           
           if (typeof item === 'string') {
             // If the item is just a string, use it as the title
-            taskTitle = item;
+            taskTitle = formatTaskTitle(item);
             taskDescription = 'No description provided';
           } else if (typeof item === 'object') {
             // Try different possible property names
-            taskTitle = item.task || item.title || item.name || item.id || `Task ${index + 1}`;
+            const rawTitle = item.task || item.title || item.name || item.id || `Task ${index + 1}`;
+            taskTitle = formatTaskTitle(rawTitle);
             taskDescription = item.description || item.desc || item.details || 'No description provided';
           } else {
             // Fallback for other types
@@ -279,7 +314,7 @@ const parseTasksFromResponse = (response: string): Task[] => {
         .map(([key, value]) => ({ key, value }));
       
       if (stringProps.length > 0) {
-        fallbackTask.description = `Document analysis: ${stringProps.map(p => `${p.key}: ${p.value}`).join(', ')}`;
+        fallbackTask.description = `Document analysis: ${stringProps.map(p => `${formatTaskTitle(p.key)}: ${p.value}`).join(', ')}`;
       }
     }
     
