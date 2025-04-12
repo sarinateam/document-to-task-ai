@@ -57,8 +57,21 @@ export const analyzeDocument = async (req: Request, res: Response) => {
     // Analyze the document with progress updates
     const result = await analyzeDocumentContent(text, modelId, sendProgress);
 
-    // Send the final result
-    res.write(`data: ${JSON.stringify({ type: 'complete', result })}\n\n`);
+    // Extract document name from file or use a default
+    let documentName = 'Document';
+    if (req.file) {
+      // Use the original filename without extension
+      documentName = req.file.originalname.replace(/\.[^/.]+$/, '');
+    }
+
+    // Send the final result with document name
+    res.write(`data: ${JSON.stringify({ 
+      type: 'complete', 
+      result: {
+        ...result,
+        documentName
+      }
+    })}\n\n`);
     res.end();
   } catch (error) {
     console.error('Error in document analysis:', error);
